@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset='utf-8' />
+  <title>People of Color as a Percentage of County Population, 1860 - 2020</title>
+  <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+
+  <!-- maplibre-gl.css here -->
+  <link href='https://unpkg.com/maplibre-gl@2.1.7/dist/maplibre-gl.css' rel='stylesheet' />
+  <!-- Rubik font -->
+  <link href="https://fonts.googleapis.com/css?family=Rubik&display=swap" rel="stylesheet">
+
+  <style>
+    /* basic css to style the viewer goes here */
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+    }
+
+    /* set styles for the container holding the title and slider */
+    .session {
+      position: absolute;
+      z-index: 1;
+      background-color: rgba(255, 255, 255, 0.5);
+      border-radius: 3px;
+      box-shadow: 0px 0px 0px 1px rgba(0, 0, 0, 0.3);
+      top: 10px;
+      left: 10px;
+      padding: 5px;
+    }
+
+    /* set styles for the container holding the year legend */
+    .container {
+      display: table;
+      width: 100%;
+      margin: 0;
+    }
+
+    /* set font styles for the title */
+    h1 {
+      font-size: 20px;
+      font-family: 'Rubik', sans-serif;
+      padding-bottom: 0px;
+      padding-top: 0px;
+      font-weight: normal;
+    }
+
+    /* set font styles for the identified year */
+    h2 {
+      cursor: pointer;
+      font-size: 14px;
+      font-family: 'Rubik', sans-serif;
+      padding-bottom: 0px;
+      padding-top: 0px;
+      font-weight: normal;
+      width: 50%;
+      text-align: left;
+      display: table-cell;
+    }
+
+    /* define the slider width and change the cursor to a pointer on hover */
+    #slider {
+      cursor: pointer;
+      width: 275px;
+    }
+
+    #legend {
+      background-color: rgba(255, 255, 255, 0.5);
+      border-radius: 3px;
+      bottom: 30px;
+      width: 130px;
+      box-shadow: 0px 0px 0px 1px rgba(0, 0, 0, 0.3);
+      font: 12px/20px 'Rubik', 'Rubik', 'Rubik', sans-serif;
+      padding: 10px;
+      position: absolute;
+      right: 10px;
+      z-index: 1;
+      line-height: 18px;
+      color: black;
+    }
+
+    .map-overlay i {
+      width: 10px;
+      height: 10px;
+      float: left;
+      margin-right: 5px;
+      margin-top: 4px;
+      opacity: 0.7;
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <!-- id the map div -->
+  <div id='map'></div>
+
+  <!-- title and time slider -->
+  <div class='session' id='sliderbar'>
+    <!-- the shown title of the map -->
+    <h1>People of Color as a Percentage of<br>County Population, 1860 - 2020</h1>
+    <div class='container'>
+      <!-- the selected year -->
+      <h2>Year: <label id='active-year'>1860</label></h2>
+    </div>
+    <!-- the slider has a range from 1878 to 2010, intervals of 1 year, and an initial value of 2010 -->
+    <input id='slider' class='row' type='range' min='1860' max='2020' step='10' value='2020' />
+  </div>
+
+  <!-- choropleth legend -->
+  <div class='map-overlay' id='legend'></div>
+
+  <!-- maplibre-gl.js library -->
+  <script src='https://unpkg.com/maplibre-gl@2.1.7/dist/maplibre-gl.js'></script>
+
+  <!-- d3 js -->
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+
+  <script>
+    // javascript goes here
+
+    // define the initial slider-selected year
+    const initYear = document.getElementById('slider').value;
+
+    // update text in the UI
+    document.getElementById('active-year').innerText = initYear;
+
+    // your maptiler key
+    const key = 'iHis78VlL5imw2Vzmdh3'
+
+    // define the style.json for the vector tiles here
+    const style = 'https://api.maptiler.com/maps/darkmatter/style.json?key=' + key
+
+    // define the map
+    const map = new maplibregl.Map({
+      container: 'map',
+      bounds: [[-123,24.4],[-69,52.4]], // the coordinate boundaries of the lower 48
+      maxZoom: 9,
+      style: style
+    });
+
+    // add zoom and rotation controls to the map.
+    map.addControl(new maplibregl.NavigationControl());
+
+    // add a scale bar
+    map.addControl(new maplibregl.ScaleControl({
+      position: 'bottom-left',
+      unit: 'imperial' // you can change from imperial to metric, if desired
+    }));
+
+    // create a popup without adding to map
+    let popup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false
+    });
+
+    // define initial hover state
+    let hoveredStateId = null;
+
+    // Add a function to style the counties by percent people of color
+    function getColor(d) {
+      return d > 75.00 ? '#bd0026' :
+        d > 50.00 ? '#f03b20' :
+        d > 25.00 ? '#fd8d3c' :
+        d > 5.00 ? '#fecc5c' :
+        d > -1 ? '#ffffb2' :
+        d > -2 ? '#dcdcdc' :
+        'rgba(0,0,0,0.0)'; // supported by Microsoft Edge
+    };
+
+    const legend = document.getElementById('legend');
+    const item = document.createElement('div');
+    item.innerHTML +=
+        "<div class='column1' style='width: 100%; float: left;'>" +
+          "<span>People of Color (%)</span>" +
+          '<br>' + '<i style="background:' + getColor(76) + '"></i> ' + '>75%' +
+          '<br>' + '<i style="background:' + getColor(51) + '"></i> ' + '50.01% - 75%' +
+          '<br>' + '<i style="background:' + getColor(26) + '"></i> ' + '25.01% - 50%' +
+          '<br>' + '<i style="background:' + getColor(6) + '"></i> ' + '5.01% - 25%' +
+          '<br>' + '<i style="background:' + getColor(0) + '"></i> ' + '0% - 5%' +
+          '<br>' + '<i style="background:' + getColor(-1) + '"></i> ' + 'No Data' +
+        "</div>"
+
+    legend.appendChild(item);
+
+    // when the map loads, call a function
+    map.on('load', () => {
+
+      // define incoming geojson data
+      const mergeco = d3.json('./data/merged_counties.json');
+
+      // promise to wait until geojson files are loaded
+      Promise.all([mergeco]).then((data) => {
+
+        // define the data according to its order in object array
+        const counties = data[0];
+
+        // add the source to the map
+        map.addSource('counties', {
+          type: 'geojson',
+          data: counties // use our data as the data source
+        });
+        // add the GeoJSON data as a mapbox gl layer
+        map.addLayer({
+          'id': 'counties',
+          'type': 'fill',
+          'source': 'counties', // refers to source above
+          'layout': {'visibility': 'visible'},
+          "paint": {
+            "fill-color": {"property": "Perc_POC","stops": [[-1.00, '#dcdcdc'],[0.00, '#ffffb2'],[5.01, '#fecc5c'],[25.01, '#fd8d3c'],[50.01, '#f03b20'],[75.01, '#bd0026']]},
+            "fill-opacity": [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false],
+              1.0,
+              0.5
+            ],
+            "fill-outline-color": {"property": "Perc_POC","stops": [[-1.00, '#dcdcdc'],[0.00, '#ffffb2'],[5.01, '#fecc5c'],[25.01, '#fd8d3c'],[50.01, '#f03b20'],[75.01, '#bd0026']]}},
+            "filter": ['==', ['string', ['get', 'DECADE']], initYear]
+        });
+
+      });
+
+    });
+
+    // fire a function on a mousemove and feed it the geojson we gave an id of 'counties'
+    map.on('mousemove','counties', (e) => {
+
+      // change the cursor style as a UI indicator.
+      map.getCanvas().style.cursor = 'pointer';
+
+      // reset the hover state id on mouse move so the layer knows when to change opacity
+      if (e.features.length > 0) {
+        if (hoveredStateId !== null) {
+          map.setFeatureState(
+            { source: 'counties', id: hoveredStateId },
+            { hover: false }
+          );
+        }
+        hoveredStateId = e.features[0].id;
+        map.setFeatureState(
+          { source: 'counties', id: hoveredStateId },
+          { hover: true }
+        );
+      }
+
+      // define the layer properties
+      // with "e.features[0].properties," you have access to all of the properties from the initial geojson layer
+      let props = e.features[0].properties;
+
+      // get the popup defined above
+      popup
+        .setLngLat(e.lngLat) // the location of the cursor
+        .setHTML('<b>' + props.Geo_QName + '</b><br>Census Year: ' + props.DECADE + '<br>% People of Color: ' + props.Perc_POC + '%') // feed the popup the prop info
+        .addTo(map) // add the popup to the map
+
+    });
+
+    // when you mouse off the layer...
+    map.on('mouseleave', 'counties', () => {
+
+      // change the cursor style back to initial setting
+      map.getCanvas().style.cursor = '';
+
+      // reset the hover state id
+      if (hoveredStateId !== null) {
+        map.setFeatureState(
+          { source: 'counties', id: hoveredStateId },
+          { hover: false }
+        );
+      }
+      hoveredStateId = null;
+
+      // and remove the popup
+      popup.remove();
+
+    });
+
+    // listen for a slider input
+    document.getElementById('slider').addEventListener('input', (event) => {
+
+      // define the newly-selected year
+      const year = event.target.value;
+
+      // update text in the UI
+      document.getElementById('active-year').innerText = year;
+
+    });
+
+    // when there is a change in the time slider value
+    document.getElementById('sliderbar').addEventListener('change', (event) => {
+
+      // define the newly-selected year
+      const year = event.target.value;
+
+      // wait until slider movement stops (prevents lagging with filtration)
+      Promise.resolve().then(_ => {
+
+        // set a filter on the wildfires layer that tests for a match between each feature's year and the year identified by the time slider
+        map.setFilter('counties', ['==', ['string', ['get', 'DECADE']], year]);
+
+      });
+
+    });
+
+  </script>
+
+</body>
